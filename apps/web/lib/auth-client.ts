@@ -20,6 +20,7 @@ interface SessionResult {
     | { user: { id: string; email: string; name?: string | null } }
     | null;
   error: { message?: string; code?: string } | null;
+  isPending: boolean;
 }
 
 interface AuthResult<T = unknown> {

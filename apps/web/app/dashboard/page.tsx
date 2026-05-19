@@ -59,10 +59,10 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session.data === null && !session.error) {
+    if (!session.isPending && session.data === null && !session.error) {
       router.replace("/login");
     }
-  }, [session.data, session.error, router]);
+  }, [session.isPending, session.data, session.error, router]);
 
   async function refresh() {
     setLoading(true);
@@ -139,7 +139,7 @@ export default function DashboardPage() {
     ).toFixed(2);
   }, [livenessSessions]);
 
-  if (!user) {
+  if (session.isPending || !user) {
     return (
       <div className="grid min-h-svh place-items-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
