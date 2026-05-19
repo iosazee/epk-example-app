@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 
 import {
-  $fetch,
   registerPasskey,
   signOut,
   useSession,
@@ -68,16 +67,18 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pk, ls] = await Promise.all([
-        $fetch<{ passkeys: PasskeyRow[] }>("/api/debug/passkeys", {
-          method: "GET",
-        }),
-        $fetch<{ sessions: LivenessRow[] }>("/api/debug/liveness-sessions", {
-          method: "GET",
-        }),
+      const [pkRes, lsRes] = await Promise.all([
+        fetch("/api/debug/passkeys", { credentials: "include" }),
+        fetch("/api/debug/liveness-sessions", { credentials: "include" }),
       ]);
-      setPasskeys(pk.data?.passkeys ?? []);
-      setLivenessSessions(ls.data?.sessions ?? []);
+      const pk = pkRes.ok
+        ? ((await pkRes.json()) as { passkeys: PasskeyRow[] })
+        : { passkeys: [] };
+      const ls = lsRes.ok
+        ? ((await lsRes.json()) as { sessions: LivenessRow[] })
+        : { sessions: [] };
+      setPasskeys(pk.passkeys ?? []);
+      setLivenessSessions(ls.sessions ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

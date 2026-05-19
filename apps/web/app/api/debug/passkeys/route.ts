@@ -7,7 +7,11 @@ import { db } from "@/lib/db";
  * injected by the liveness enforcement hook. Demo purposes only.
  */
 export async function GET(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers });
+  // Plugin types are widened in lib/auth.ts (see note there); the
+  // runtime shape from `getSession` is the standard better-auth one.
+  const session = (await auth.api.getSession({ headers: req.headers })) as {
+    user: { id: string; email: string; name?: string | null };
+  } | null;
   if (!session?.user?.id) {
     return Response.json({ error: "Not signed in" }, { status: 401 });
   }

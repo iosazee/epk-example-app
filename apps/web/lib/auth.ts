@@ -98,6 +98,10 @@ export const auth = betterAuth({
         });
       },
     }),
+    // expo-passkey / expo-passkey-liveness ship server plugins built
+    // against a different @better-auth/core minor than the one resolved
+    // for this workspace; runtime is compatible but TS can't reconcile
+    // two BetterAuthPlugin definitions in the same dep graph.
     expoPasskey({
       rpName: env.RP_NAME,
       rpId: env.RP_ID,
@@ -111,7 +115,7 @@ export const auth = betterAuth({
         // Serverless on Vercel — skip background timers.
         disableInterval: true,
       },
-    }),
+    }) as never,
     expoPasskeyLiveness({
       rpId: env.RP_ID,
       liveness: {
@@ -125,6 +129,6 @@ export const auth = betterAuth({
         },
       },
       cleanup: { disableInterval: true },
-    }),
+    }) as never,
   ],
 });
