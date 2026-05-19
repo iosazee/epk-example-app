@@ -2,9 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
 export async function GET(req: Request) {
-  const session = (await auth.api.getSession({ headers: req.headers })) as {
-    user: { id: string; email: string; name?: string | null };
-  } | null;
+  const session = await auth.api.getSession({ headers: req.headers });
   if (!session?.user?.id) {
     return Response.json({ error: "Not signed in" }, { status: 401 });
   }

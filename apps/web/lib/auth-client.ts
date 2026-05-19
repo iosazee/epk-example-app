@@ -6,11 +6,7 @@ import { expoPasskeyClient } from "expo-passkey/web";
 
 const rawClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-  // expo-passkey ships its client plugin built against a different
-  // @better-auth/core minor than the one resolved for this workspace;
-  // the runtime shape is compatible, but TS can't reconcile two
-  // BetterAuthClientPlugin definitions, so we widen here.
-  plugins: [emailOTPClient(), expoPasskeyClient() as never],
+  plugins: [emailOTPClient(), expoPasskeyClient()],
 });
 
 /**
