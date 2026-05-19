@@ -1,30 +1,24 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  Cpu,
   Fingerprint,
   KeyRound,
   Loader2,
   LogOut,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import {
+  $fetch,
   registerPasskey,
   signOut,
   useSession,
-  $fetch,
 } from "@/lib/auth-client";
 import { verifyLivenessWeb } from "@/lib/liveness-web";
 
@@ -75,8 +69,12 @@ export default function DashboardPage() {
     setError(null);
     try {
       const [pk, ls] = await Promise.all([
-        $fetch<{ passkeys: PasskeyRow[] }>("/api/debug/passkeys", { method: "GET" }),
-        $fetch<{ sessions: LivenessRow[] }>("/api/debug/liveness-sessions", { method: "GET" }),
+        $fetch<{ passkeys: PasskeyRow[] }>("/api/debug/passkeys", {
+          method: "GET",
+        }),
+        $fetch<{ sessions: LivenessRow[] }>("/api/debug/liveness-sessions", {
+          method: "GET",
+        }),
       ]);
       setPasskeys(pk.data?.passkeys ?? []);
       setLivenessSessions(ls.data?.sessions ?? []);
@@ -111,7 +109,9 @@ export default function DashboardPage() {
         livenessToken: live.data.livenessToken,
       });
       if (r.error) {
-        setError(r.error.message ?? r.error.code ?? "Passkey registration failed");
+        setError(
+          r.error.message ?? r.error.code ?? "Passkey registration failed"
+        );
         return;
       }
       await refresh();
@@ -127,191 +127,444 @@ export default function DashboardPage() {
     router.replace("/login");
   }
 
+  const verifiedCount = useMemo(
+    () => livenessSessions.filter((s) => s.status === "verified").length,
+    [livenessSessions]
+  );
+  const avgScore = useMemo(() => {
+    const scored = livenessSessions.filter((s) => typeof s.score === "number");
+    if (!scored.length) return null;
+    return (
+      scored.reduce((a, s) => a + (s.score ?? 0), 0) / scored.length
+    ).toFixed(2);
+  }, [livenessSessions]);
+
   if (!user) {
     return (
-      <div className="min-h-svh flex items-center justify-center">
+      <div className="grid min-h-svh place-items-center bg-background">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-svh bg-gradient-to-b from-background via-background to-muted/30">
-      <header className="border-b bg-background/50 backdrop-blur sticky top-0 z-10">
-        <div className="container mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
+    <div className="relative min-h-svh overflow-hidden bg-background">
+      <div className="bg-grain pointer-events-none absolute inset-0 -z-10" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-dot opacity-30" />
+      <div className="pointer-events-none absolute -left-40 top-0 -z-10 h-[420px] w-[420px] rounded-full bg-phosphor/8 blur-[140px]" />
+
+      {/* ============== HEADER ============== */}
+      <header className="sticky top-0 z-20 border-b border-border-strong/70 bg-background/75 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1320px] items-center justify-between px-6 py-4">
+          <Link href="/" className="flex items-center gap-3">
+            <Sigil />
+            <div className="flex items-baseline gap-2">
+              <span className="data text-[13px] tracking-[0.18em] uppercase">
+                EPK · Ledger
+              </span>
+              <span className="data text-[11px] text-muted-foreground">
+                / dashboard
+              </span>
+            </div>
+          </Link>
+
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            <span className="font-semibold">EPK Example</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              {user.email}
+            <span className="hidden items-center gap-2 rounded-full border border-border-strong px-3 py-1.5 sm:inline-flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-phosphor phosphor-flicker" />
+              <span className="data text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                session · {user.email}
+              </span>
             </span>
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-1.5" />
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="data inline-flex h-8 items-center gap-2 rounded-full border border-border-strong px-3 text-[11px] uppercase tracking-[0.12em] text-muted-foreground hover:border-blood hover:text-blood"
+            >
+              <LogOut className="h-3.5 w-3.5" />
               Sign out
-            </Button>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto max-w-5xl px-4 py-8 space-y-8">
-        <section>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back, {user.name ?? user.email.split("@")[0]}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your passkeys and inspect the server-side audit trail.
-          </p>
+      {/* ============== MAIN ============== */}
+      <main className="mx-auto max-w-[1320px] px-6 py-10 md:py-14">
+        {/* WELCOME */}
+        <section className="rise grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+          <div>
+            <span className="tag tag-phosphor">
+              <span className="h-1.5 w-1.5 rounded-full bg-phosphor phosphor-flicker" />
+              authenticated
+            </span>
+            <h1 className="display mt-6 text-[clamp(44px,6vw,84px)]">
+              Welcome back,
+              <br />
+              <span className="display-italic text-phosphor">
+                {user.name ?? user.email.split("@")[0]}
+              </span>
+              .
+            </h1>
+            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
+              Inspect bound credentials and the server-side audit trail from{" "}
+              <code className="data text-foreground">
+                /expo-passkey/liveness/verify
+              </code>
+              . Register additional passkeys to bind more devices.
+            </p>
+          </div>
+
+          {/* primary action card */}
+          <div className="relative overflow-hidden rounded-xl border border-border-strong bg-paper/40 p-6">
+            <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-phosphor/12 blur-3xl" />
+            <span className="tag">§ Action</span>
+            <h3 className="mt-5 text-[20px] leading-tight">
+              Bind a new passkey to this device.
+            </h3>
+            <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
+              Runs liveness · creates credential · writes audit slice.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleRegisterPasskey}
+                disabled={busy}
+                className="group inline-flex h-11 items-center justify-between gap-3 rounded-full bg-phosphor px-5 text-phosphor-foreground transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-60"
+              >
+                <span className="data text-[11px] uppercase tracking-[0.14em] font-bold">
+                  {busy ? "Registering ceremony…" : "Register passkey"}
+                </span>
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-phosphor-foreground/15">
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Fingerprint className="h-3.5 w-3.5" />
+                  )}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={refresh}
+                disabled={loading}
+                className="data inline-flex h-11 items-center gap-2 rounded-full border border-border-strong px-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground hover:border-foreground hover:text-foreground"
+              >
+                <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+                Refresh
+              </button>
+            </div>
+          </div>
         </section>
 
         {error ? (
-          <div className="rounded-md border border-destructive/50 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {error}
+          <div className="mt-8 flex items-start gap-3 rounded-md border border-blood/40 bg-blood/8 px-4 py-3">
+            <span className="data mt-0.5 text-[10px] uppercase tracking-[0.16em] text-blood">
+              err
+            </span>
+            <p className="text-[13px] leading-relaxed text-foreground">
+              {error}
+            </p>
           </div>
         ) : null}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <KeyRound className="h-4 w-4" />
-                Your passkeys
-              </CardTitle>
-              <CardDescription>
-                Bound to this device with liveness verification
-              </CardDescription>
-            </div>
-            <Button onClick={handleRegisterPasskey} disabled={busy} size="sm">
-              {busy ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Registering…
-                </>
-              ) : (
-                <>
-                  <Fingerprint className="h-4 w-4" />
-                  Register passkey
-                </>
-              )}
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <PasskeySkeleton />
-            ) : passkeys.length === 0 ? (
-              <EmptyState
-                title="No passkeys yet"
-                body="Register one to skip the email-code step next time. The ceremony binds the credential to this device with a liveness check."
-              />
-            ) : (
-              <ul className="divide-y divide-border">
-                {passkeys.map((p) => (
-                  <PasskeyRow key={p.id} row={p} />
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        {/* ============== STATS LEDGER ============== */}
+        <section className="mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border-strong bg-border md:grid-cols-4">
+          <Stat
+            k="A1"
+            label="Bound credentials"
+            value={passkeys.length.toString().padStart(2, "0")}
+            sub="WebAuthn ES256"
+            icon={<KeyRound className="h-3.5 w-3.5" />}
+          />
+          <Stat
+            k="A2"
+            label="Liveness sessions"
+            value={livenessSessions.length.toString().padStart(2, "0")}
+            sub={`${verifiedCount} verified`}
+            icon={<Activity className="h-3.5 w-3.5" />}
+          />
+          <Stat
+            k="A3"
+            label="Mean PAD score"
+            value={avgScore ?? "—"}
+            sub="auto-pass · L1"
+            icon={<ShieldCheck className="h-3.5 w-3.5" />}
+          />
+          <Stat
+            k="A4"
+            label="RP host"
+            value={
+              typeof window !== "undefined"
+                ? window.location.hostname.replace("www.", "")
+                : "—"
+            }
+            sub="origin-bound"
+            icon={<Cpu className="h-3.5 w-3.5" />}
+          />
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Recent liveness sessions</CardTitle>
-            <CardDescription>
-              Server-side audit trail from <code>/expo-passkey/liveness/verify</code>
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <PasskeySkeleton />
-            ) : livenessSessions.length === 0 ? (
-              <EmptyState
-                title="No sessions yet"
-                body="They&rsquo;ll appear here after you register a passkey or sign in with one."
-              />
-            ) : (
-              <div className="space-y-2">
-                {livenessSessions.slice(0, 8).map((s) => (
-                  <LivenessSessionRow key={s.id} row={s} />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* ============== PASSKEYS PANEL ============== */}
+        <section className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border-strong bg-border lg:grid-cols-[1.4fr_1fr]">
+          {/* Passkeys */}
+          <div className="bg-background p-7">
+            <PanelHeader
+              n="§ 01"
+              title="Bound passkeys"
+              sub="device credentials with attached liveness audit"
+            />
+
+            <div className="mt-6">
+              {loading ? (
+                <Skeleton rows={2} />
+              ) : passkeys.length === 0 ? (
+                <EmptyState
+                  title="No credentials bound yet."
+                  body="Register a passkey above — the ceremony binds it to this device and writes a liveness audit slice."
+                />
+              ) : (
+                <ul className="divide-y divide-border-strong/40">
+                  {passkeys.map((p, i) => (
+                    <PasskeyEntry key={p.id} row={p} idx={i} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Liveness audit */}
+          <div className="bg-background p-7">
+            <PanelHeader
+              n="§ 02"
+              title="Liveness audit"
+              sub={
+                <>
+                  ▸ <code className="data">/expo-passkey/liveness/verify</code>
+                </>
+              }
+            />
+
+            <div className="mt-6">
+              {loading ? (
+                <Skeleton rows={4} />
+              ) : livenessSessions.length === 0 ? (
+                <EmptyState
+                  title="No sessions yet."
+                  body="They appear here after registering a passkey or signing in with one."
+                />
+              ) : (
+                <ol className="space-y-2">
+                  {livenessSessions.slice(0, 8).map((s) => (
+                    <LivenessEntry key={s.id} row={s} />
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <footer className="mt-12 flex flex-col gap-3 border-t border-border-strong/70 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="data text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            mit · iosazee / epk-example-app
+          </p>
+          <div className="flex items-center gap-5">
+            <Link
+              href="https://github.com/iosazee/expo-passkey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="data text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+            >
+              expo-passkey ↗
+            </Link>
+            <Link
+              href="https://github.com/iosazee/expo-passkey-liveness"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="data text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+            >
+              expo-passkey-liveness ↗
+            </Link>
+          </div>
+        </footer>
       </main>
     </div>
   );
 }
 
-function PasskeyRow({ row }: { row: PasskeyRow }) {
+/* ============================================================
+   Sub-components
+   ============================================================ */
+
+function Sigil() {
+  return (
+    <span className="relative inline-grid h-7 w-7 place-items-center">
+      <span className="absolute inset-0 rounded-md border border-foreground/70" />
+      <span className="absolute inset-1 rounded-sm bg-phosphor/80 phosphor-flicker" />
+      <span className="relative data text-[10px] font-bold text-phosphor-foreground">
+        EPK
+      </span>
+    </span>
+  );
+}
+
+function Stat({
+  k,
+  label,
+  value,
+  sub,
+  icon,
+}: {
+  k: string;
+  label: string;
+  value: string;
+  sub: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="group relative bg-background p-6 transition-colors hover:bg-paper/40">
+      <div className="flex items-center justify-between">
+        <span className="data text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {label}
+        </span>
+        <span className="inline-grid h-6 w-6 place-items-center rounded-md border border-border-strong text-muted-foreground transition-colors group-hover:border-phosphor group-hover:text-phosphor">
+          {icon}
+        </span>
+      </div>
+      <p className="data mt-5 text-[28px] leading-none tracking-tight">
+        {value}
+      </p>
+      <div className="mt-3 flex items-center justify-between">
+        <span className="data text-[11px] text-muted-foreground tracking-[0.04em]">
+          {sub}
+        </span>
+        <span className="data text-[10px] text-phosphor">{k}</span>
+      </div>
+    </div>
+  );
+}
+
+function PanelHeader({
+  n,
+  title,
+  sub,
+}: {
+  n: string;
+  title: string;
+  sub: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <span className="data text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+          {n}
+        </span>
+      </div>
+      <h2 className="display mt-3 text-[clamp(26px,3vw,38px)]">{title}</h2>
+      <p className="data mt-2 text-[11.5px] uppercase tracking-[0.12em] text-muted-foreground">
+        {sub}
+      </p>
+      <div className="hr-tick mt-5" />
+    </div>
+  );
+}
+
+function PasskeyEntry({ row, idx }: { row: PasskeyRow; idx: number }) {
   const liveness = row.metadata?.liveness;
   return (
-    <li className="py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="capitalize">{row.platform}</Badge>
-          <span className="font-mono text-xs text-muted-foreground">
-            {row.credentialId.slice(0, 18)}…
-          </span>
+    <li className="group flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <div className="flex items-start gap-4">
+        <span className="data mt-1 text-[10px] text-phosphor tracking-[0.1em]">
+          {String(idx + 1).padStart(2, "0")}
+        </span>
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="data inline-flex items-center gap-1 rounded-sm bg-paper px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.12em] text-foreground">
+              {row.platform}
+            </span>
+            <span className="data text-[12px] text-muted-foreground">
+              {row.credentialId.slice(0, 22)}…
+            </span>
+          </div>
+          {liveness ? (
+            <p className="data text-[11.5px] text-muted-foreground">
+              ▸ via{" "}
+              <span className="text-foreground">{liveness.provider}</span> ·
+              score{" "}
+              <span className="text-phosphor">{liveness.score}</span> ·{" "}
+              {liveness.padLevel}
+              {liveness.registeredModality ? (
+                <> · modality {liveness.registeredModality}</>
+              ) : null}
+            </p>
+          ) : (
+            <p className="data text-[11.5px] text-muted-foreground italic">
+              ▸ no liveness slice
+            </p>
+          )}
         </div>
-        {liveness ? (
-          <p className="text-xs text-muted-foreground">
-            verified via{" "}
-            <span className="font-medium text-foreground">{liveness.provider}</span>{" "}
-            · score {liveness.score} · {liveness.padLevel}
-            {liveness.registeredModality ? (
-              <> · modality {liveness.registeredModality}</>
-            ) : null}
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground italic">no liveness slice</p>
-        )}
       </div>
-      <span className="text-xs text-muted-foreground tabular-nums">
+      <span className="data shrink-0 text-[11px] text-muted-foreground">
         {new Date(row.createdAt).toLocaleString()}
       </span>
     </li>
   );
 }
 
-function LivenessSessionRow({ row }: { row: LivenessRow }) {
-  const color =
+function LivenessEntry({ row }: { row: LivenessRow }) {
+  const accent =
     row.status === "verified"
-      ? "default"
+      ? "text-phosphor border-phosphor/40 bg-phosphor/8"
       : row.status === "failed"
-        ? "destructive"
-        : "secondary";
+      ? "text-blood border-blood/40 bg-blood/8"
+      : "text-muted-foreground border-border-strong bg-paper/40";
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-sm">
-      <div className="flex items-center gap-3 min-w-0">
-        <Badge variant={color}>{row.status}</Badge>
-        <span className="text-muted-foreground">{row.challenge}</span>
-        <Separator orientation="vertical" className="h-4" />
-        <span className="text-xs text-muted-foreground truncate">
-          {row.provider} · score {row.score ?? "—"}
-        </span>
+    <li className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-border-strong/60 bg-paper/30 px-3 py-2">
+      <span
+        className={[
+          "data inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.14em]",
+          accent,
+        ].join(" ")}
+      >
+        {row.status}
+      </span>
+      <div className="min-w-0">
+        <p className="data truncate text-[12px]">
+          <span className="text-foreground">{row.challenge}</span>
+          <span className="text-muted-foreground"> · {row.provider}</span>
+          <span className="text-muted-foreground">
+            {" "}
+            · score {row.score ?? "—"}
+          </span>
+        </p>
       </div>
-      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+      <span className="data shrink-0 text-[10.5px] text-muted-foreground">
         {new Date(row.createdAt).toLocaleTimeString()}
       </span>
-    </div>
+    </li>
   );
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="text-center py-8">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">{body}</p>
+    <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-border-strong/60 bg-paper/20 p-6">
+      <span className="data text-[10px] uppercase tracking-[0.16em] text-phosphor">
+        ▌ empty
+      </span>
+      <p className="text-[15px] leading-tight">{title}</p>
+      <p className="max-w-md text-[13px] leading-relaxed text-muted-foreground">
+        {body}
+      </p>
     </div>
   );
 }
 
-function PasskeySkeleton() {
+function Skeleton({ rows }: { rows: number }) {
   return (
     <div className="space-y-2">
-      {[0, 1].map((i) => (
-        <div key={i} className="h-12 rounded-md bg-muted/40 animate-pulse" />
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="h-12 animate-pulse rounded-md bg-paper/40"
+          style={{ animationDelay: `${i * 80}ms` }}
+        />
       ))}
     </div>
   );
