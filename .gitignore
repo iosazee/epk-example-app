@@ -8,6 +8,8 @@ node_modules
 dist
 build
 *.tsbuildinfo
+.secrets
+
 
 # Next.js
 next-env.d.ts
