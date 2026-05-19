@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "expo-passkey-liveness demo",
+  title: "EPK Example — passkeys + liveness, end to end",
   description:
-    "End-to-end integration of expo-passkey and expo-passkey-liveness against Better Auth.",
+    "Web + mobile reference app for expo-passkey and expo-passkey-liveness. WebAuthn ceremonies on a single Better Auth backend, with face-PAD gating.",
 };
 
 export default function RootLayout({
@@ -14,9 +18,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen antialiased">
-        <main className="mx-auto max-w-2xl px-6 py-12">{children}</main>
+    <html lang="en" className={cn("font-sans", geist.variable)} suppressHydrationWarning>
+      <body className="min-h-svh bg-background text-foreground antialiased">
+        {children}
       </body>
     </html>
   );

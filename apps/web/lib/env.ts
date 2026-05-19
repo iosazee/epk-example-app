@@ -15,6 +15,8 @@ const REQUIRED = [
 ] as const;
 
 const OPTIONAL = [
+  "RESEND_API_KEY",
+  "RESEND_FROM",
   "MOBILE_IOS_BUNDLE_ID",
   "MOBILE_IOS_TEAM_ID",
   "MOBILE_ANDROID_PACKAGE",

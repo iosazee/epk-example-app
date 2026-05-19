@@ -1,3 +1,6 @@
+import {
+  authenticateWithPasskeyAndLiveness,
+} from "expo-passkey-liveness/native";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -12,27 +15,60 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { signIn, signUp } from "@/lib/auth-client";
+import {
+  authClient,
+  authenticateWithPasskey,
+  emailOtp,
+  signIn,
+} from "@/lib/auth-client";
+import { makeLivenessFetcher } from "@/lib/api";
 
-type Mode = "sign-in" | "sign-up";
+type Mode = "passkey" | "otp";
+type OtpStep = "email" | "code";
 
 export default function SignInScreen() {
-  const [mode, setMode] = useState<Mode>("sign-up");
-  const [email, setEmail] = useState("alice@example.com");
-  const [password, setPassword] = useState("password123");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<Mode>("passkey");
 
-  async function submit() {
-    setError(null);
+  return (
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.container}
+      >
+        <Text style={styles.heading}>EPK Example</Text>
+        <Text style={styles.subheading}>
+          Passwordless. Passkey first, email code as fallback.
+        </Text>
+
+        <View style={styles.tabs}>
+          <Tab label="Passkey" active={mode === "passkey"} onPress={() => setMode("passkey")} />
+          <Tab label="Email code" active={mode === "otp"} onPress={() => setMode("otp")} />
+        </View>
+
+        {mode === "passkey" ? <PasskeyTab /> : <OtpTab />}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+function PasskeyTab() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetcher = makeLivenessFetcher(
+    authClient as unknown as Parameters<typeof makeLivenessFetcher>[0]
+  );
+
+  async function handleSignIn() {
     setBusy(true);
+    setError(null);
     try {
-      const r =
-        mode === "sign-up"
-          ? await signUp.email({ email, password, name: email })
-          : await signIn.email({ email, password });
+      const r = await authenticateWithPasskeyAndLiveness(
+        { challenge: "authentication" },
+        { fetcher, authenticateWithPasskey }
+      );
       if (r.error) {
-        setError(r.error.message ?? r.error.code ?? "Unknown error");
+        setError(r.error.message);
         return;
       }
       router.replace("/(tabs)/passkey");
@@ -44,49 +80,141 @@ export default function SignInScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.container}
+    <View>
+      <Text style={styles.bodyText}>
+        Use Face ID or fingerprint to sign in. Liveness is verified as part of
+        the ceremony.
+      </Text>
+      <Pressable
+        style={[styles.button, busy && styles.buttonBusy]}
+        onPress={handleSignIn}
+        disabled={busy}
       >
-        <Text style={styles.heading}>EPK Example</Text>
-        <Text style={styles.subheading}>
-          Demo for expo-passkey + expo-passkey-liveness
-        </Text>
+        {busy ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Sign in with passkey</Text>
+        )}
+      </Pressable>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Text style={styles.hint}>
+        New here? Use the email-code tab first — you can register a passkey
+        from the dashboard.
+      </Text>
+    </View>
+  );
+}
 
-        <View style={styles.tabs}>
-          <Tab label="Sign up" active={mode === "sign-up"} onPress={() => setMode("sign-up")} />
-          <Tab label="Sign in" active={mode === "sign-in"} onPress={() => setMode("sign-in")} />
-        </View>
+function OtpTab() {
+  const [step, setStep] = useState<OtpStep>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  async function handleSend() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await emailOtp.sendVerificationOtp({ email, type: "sign-in" });
+      if (r.error) {
+        setError(r.error.message ?? r.error.code ?? "Couldn't send code");
+        return;
+      }
+      setStep("code");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleVerify() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await signIn.emailOtp({ email, otp });
+      if (r.error) {
+        setError(r.error.message ?? r.error.code ?? "Invalid code");
+        return;
+      }
+      router.replace("/(tabs)/passkey");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (step === "email") {
+    return (
+      <View>
         <TextInput
           style={styles.input}
-          placeholder="email"
+          placeholder="you@example.com"
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
+          textContentType="emailAddress"
+          autoComplete="email"
           value={email}
           onChangeText={setEmail}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="password"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Pressable style={[styles.button, busy && styles.buttonBusy]} onPress={submit} disabled={busy}>
+        <Pressable
+          style={[styles.button, busy && styles.buttonBusy, !email && styles.buttonDisabled]}
+          onPress={handleSend}
+          disabled={busy || !email}
+        >
           {busy ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>{mode === "sign-up" ? "Create account" : "Sign in"}</Text>
+            <Text style={styles.buttonText}>Send code</Text>
           )}
         </Pressable>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <TextInput
+        style={styles.input}
+        placeholder="123456"
+        keyboardType="number-pad"
+        autoComplete="one-time-code"
+        textContentType="oneTimeCode"
+        maxLength={6}
+        value={otp}
+        onChangeText={(v) => setOtp(v.replace(/\D/g, ""))}
+        autoFocus
+      />
+      <Text style={styles.hint}>
+        Sent to <Text style={styles.hintStrong}>{email}</Text>. Check spam.
+      </Text>
+      <Pressable
+        style={[styles.button, busy && styles.buttonBusy, otp.length !== 6 && styles.buttonDisabled]}
+        onPress={handleVerify}
+        disabled={busy || otp.length !== 6}
+      >
+        {busy ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Verify and sign in</Text>
+        )}
+      </Pressable>
+      <Pressable
+        style={styles.linkButton}
+        onPress={() => {
+          setStep("email");
+          setOtp("");
+          setError(null);
+        }}
+      >
+        <Text style={styles.linkText}>Use a different email</Text>
+      </Pressable>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </View>
   );
 }
 
@@ -103,11 +231,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, justifyContent: "center" },
   heading: { fontSize: 28, fontWeight: "700", color: "#0f172a" },
   subheading: { marginTop: 4, marginBottom: 32, fontSize: 14, color: "#64748b" },
-  tabs: { flexDirection: "row", gap: 8, marginBottom: 24 },
+  tabs: { flexDirection: "row", gap: 8, marginBottom: 20 },
   tab: { flex: 1, padding: 12, borderRadius: 8, backgroundColor: "#e2e8f0", alignItems: "center" },
   tabActive: { backgroundColor: "#0f172a" },
   tabText: { color: "#475569", fontWeight: "600" },
   tabTextActive: { color: "#fff" },
+  bodyText: { color: "#475569", fontSize: 14, lineHeight: 20, marginBottom: 20 },
   input: {
     backgroundColor: "#fff",
     borderColor: "#cbd5e1",
@@ -117,14 +246,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
-  error: { color: "#dc2626", marginBottom: 12, fontSize: 14 },
   button: {
-    marginTop: 8,
+    marginTop: 4,
     padding: 16,
     borderRadius: 8,
     backgroundColor: "#0f172a",
     alignItems: "center",
   },
   buttonBusy: { opacity: 0.7 },
+  buttonDisabled: { opacity: 0.4 },
   buttonText: { color: "#fff", fontWeight: "600", fontSize: 16 },
+  linkButton: { marginTop: 8, padding: 12, alignItems: "center" },
+  linkText: { color: "#475569", fontSize: 13, fontWeight: "500" },
+  error: { color: "#dc2626", marginTop: 10, fontSize: 14 },
+  hint: { color: "#64748b", fontSize: 12, marginTop: 8, marginBottom: 8, lineHeight: 16 },
+  hintStrong: { fontWeight: "600", color: "#0f172a" },
 });

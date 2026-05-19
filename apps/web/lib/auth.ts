@@ -1,14 +1,18 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { emailOTP } from "better-auth/plugins";
 import { expoPasskey } from "expo-passkey/server";
 import {
   expoPasskeyLiveness,
   customProvider,
   inMemoryReplayStore,
 } from "expo-passkey-liveness/server";
+import { Resend } from "resend";
 
 import { db } from "./db";
 import { env } from "./env";
+
+const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 
 /**
  * Demo liveness provider that auto-passes every check.
@@ -65,13 +69,35 @@ export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL,
   secret: env.BETTER_AUTH_SECRET,
   database: prismaAdapter(db, { provider: "postgresql" }),
-  emailAndPassword: {
-    enabled: true,
-    autoSignIn: true,
-    minPasswordLength: 6,
-  },
+  // Passwordless only — passkeys (preferred) and email OTP (fallback).
   trustedOrigins: passkeyOrigins,
   plugins: [
+    emailOTP({
+      otpLength: 6,
+      expiresIn: 600, // seconds — 10 minutes
+      sendVerificationOnSignUp: true,
+      async sendVerificationOTP({ email, otp, type }) {
+        // Type is "sign-in" | "email-verification" | "forget-password"
+        const subject =
+          type === "sign-in"
+            ? `Your EPK Example sign-in code: ${otp}`
+            : `Verify your email — code: ${otp}`;
+        const body = `Your one-time code is ${otp}\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`;
+
+        if (!resend) {
+          // Demo fallback when no Resend key is configured.
+          // eslint-disable-next-line no-console
+          console.log(`[email-otp:${type}] ${email} → ${otp}`);
+          return;
+        }
+        await resend.emails.send({
+          from: env.RESEND_FROM ?? "onboarding@resend.dev",
+          to: email,
+          subject,
+          text: body,
+        });
+      },
+    }),
     expoPasskey({
       rpName: env.RP_NAME,
       rpId: env.RP_ID,

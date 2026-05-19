@@ -1,19 +1,19 @@
 "use client";
 
 import { createAuthClient } from "better-auth/react";
+import { emailOTPClient } from "better-auth/client/plugins";
 import { expoPasskeyClient } from "expo-passkey/web";
 
 const rawClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-  plugins: [expoPasskeyClient()],
+  plugins: [emailOTPClient(), expoPasskeyClient()],
 });
 
 /**
- * better-auth 1.6+ chained-plugin inference can narrow the client
- * type past the point where core methods (`useSession`, `signIn`,
- * `signUp`, `signOut`, `getSession`) are reachable via property
- * access. The runtime is unaffected. We widen with a narrow shape
- * covering only what this demo touches — same pattern brianni uses.
+ * Better Auth's chained-plugin inference can narrow core methods past
+ * the point where property access remains viable. The runtime is
+ * unaffected — we widen with a narrow shape covering only what this
+ * app touches.
  */
 interface SessionResult {
   data:
@@ -21,33 +21,31 @@ interface SessionResult {
     | null;
   error: { message?: string; code?: string } | null;
 }
-// Replace (not intersect) the narrowed core method types so the
-// destructured re-exports below have usable shapes.
+
+interface AuthResult<T = unknown> {
+  data: T | null;
+  error: { message?: string; code?: string } | null;
+}
+
 type WidenedClient = Omit<
   typeof rawClient,
-  "useSession" | "getSession" | "signIn" | "signUp" | "signOut" | "$fetch"
+  "useSession" | "getSession" | "signIn" | "signOut" | "$fetch"
 > & {
   useSession: () => SessionResult;
   getSession: () => Promise<SessionResult>;
   signIn: {
-    email: (input: { email: string; password: string }) => Promise<{
-      data: unknown;
-      error: { message?: string; code?: string } | null;
-    }>;
-  };
-  signUp: {
-    email: (input: {
+    emailOtp: (input: {
       email: string;
-      password: string;
-      name?: string;
-    }) => Promise<{
-      data: unknown;
-      error: { message?: string; code?: string } | null;
-    }>;
+      otp: string;
+    }) => Promise<AuthResult>;
   };
   signOut: () => Promise<unknown>;
-  // `$fetch` is the better-fetch instance — we narrow it to what
-  // liveness-web.ts and the test page actually invoke.
+  emailOtp: {
+    sendVerificationOtp: (input: {
+      email: string;
+      type: "sign-in" | "email-verification" | "forget-password";
+    }) => Promise<AuthResult>;
+  };
   $fetch: <T = unknown>(
     path: string,
     init: {
@@ -66,10 +64,10 @@ export const authClient = rawClient as unknown as WidenedClient;
 
 export const {
   signIn,
-  signUp,
   signOut,
   useSession,
   getSession,
+  emailOtp,
   $fetch,
 } = authClient;
 
@@ -85,12 +83,12 @@ type PasskeyClientShape = typeof authClient & {
     rpName: string;
     metadata?: Record<string, unknown>;
     livenessToken?: string;
-  }) => Promise<{ data: unknown; error: { message?: string; code?: string } | null }>;
+  }) => Promise<AuthResult>;
   authenticateWithPasskey: (input?: {
     rpId?: string;
     userVerification?: "required" | "preferred" | "discouraged";
     livenessToken?: string;
-  }) => Promise<{ data: unknown; error: { message?: string; code?: string } | null }>;
+  }) => Promise<AuthResult>;
   isPasskeySupported?: () => Promise<boolean>;
 };
 

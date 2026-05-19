@@ -1,4 +1,5 @@
 import { expoClient } from "@better-auth/expo/client";
+import { emailOTPClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { expoPasskeyClient } from "expo-passkey/native";
 import * as SecureStore from "expo-secure-store";
@@ -13,6 +14,7 @@ const rawClient = createAuthClient({
       storagePrefix: "epk_example",
       storage: SecureStore,
     }),
+    emailOTPClient(),
     expoPasskeyClient(),
   ],
 });
@@ -34,35 +36,40 @@ interface AuthResult {
 
 type WidenedClient = Omit<
   typeof rawClient,
-  "useSession" | "getSession" | "signIn" | "signUp" | "signOut" | "$fetch"
+  "useSession" | "getSession" | "signIn" | "signOut" | "$fetch"
 > & {
   useSession: () => SessionResult;
   getSession: () => Promise<SessionResult>;
-  signIn: { email: (input: { email: string; password: string }) => Promise<AuthResult> };
-  signUp: {
-    email: (input: {
-      email: string;
-      password: string;
-      name?: string;
-    }) => Promise<AuthResult>;
+  signIn: {
+    emailOtp: (input: { email: string; otp: string }) => Promise<AuthResult>;
   };
   signOut: () => Promise<AuthResult>;
+  emailOtp: {
+    sendVerificationOtp: (input: {
+      email: string;
+      type: "sign-in" | "email-verification" | "forget-password";
+    }) => Promise<AuthResult>;
+  };
   $fetch: (typeof rawClient)["$fetch"];
 };
 
 export const authClient = rawClient as unknown as WidenedClient;
 
-export const { useSession, signIn, signUp, signOut, getSession } = authClient;
+export const { useSession, signIn, signOut, getSession, emailOtp } = authClient;
 
 // expoPasskeyClient adds these — pulled off the underlying client.
-export const registerPasskey = (rawClient as unknown as {
-  registerPasskey: (opts: {
-    userName: string;
-    displayName: string;
-    livenessToken?: string;
-  }) => Promise<AuthResult>;
-}).registerPasskey;
+export const registerPasskey = (
+  rawClient as unknown as {
+    registerPasskey: (opts: {
+      userName: string;
+      displayName: string;
+      livenessToken?: string;
+    }) => Promise<AuthResult>;
+  }
+).registerPasskey;
 
-export const authenticateWithPasskey = (rawClient as unknown as {
-  authenticateWithPasskey: (opts?: { livenessToken?: string }) => Promise<AuthResult>;
-}).authenticateWithPasskey;
+export const authenticateWithPasskey = (
+  rawClient as unknown as {
+    authenticateWithPasskey: (opts?: { livenessToken?: string }) => Promise<AuthResult>;
+  }
+).authenticateWithPasskey;
