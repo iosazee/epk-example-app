@@ -10,8 +10,18 @@ exposes a `/test` page that walks the browser through the full flow.
 
 ## Local dev
 
+A Postgres database is required (the schema uses Postgres-specific
+types Better Auth needs in production). Easiest local option:
+
+```bash
+docker run -d --name epk-pg -p 5432:5432 -e POSTGRES_PASSWORD=dev postgres:16
+```
+
+Then:
+
 ```bash
 cp .env.example .env
+# Edit .env: DATABASE_URL="postgresql://postgres:dev@localhost:5432/postgres"
 npm install --legacy-peer-deps              # from monorepo root
 npm run db:push --workspace=@epk-example/web
 npm run dev --workspace=@epk-example/web    # http://localhost:3000
@@ -57,16 +67,7 @@ Inspect rows:
    | `MOBILE_ANDROID_PACKAGE` *(optional)* | `com.iosazee.epkexample` |
    | `MOBILE_ANDROID_CERT_SHA256` *(optional)* | SHA-256 of signing cert |
 
-4. Switch `prisma/schema.prisma` from `sqlite` to `postgresql`:
-
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-
-5. Deploy. The `postinstall` runs `prisma generate`; run
+4. Deploy. The `postinstall` runs `prisma generate`; run
    `npx prisma db push` once against the Neon DB to create tables.
 
 ## What's in here
