@@ -41,8 +41,8 @@ The two libraries are installed from npm. Liveness-gated passkey flows
 need `expo-passkey` 0.3.14+ because that release forwards
 `livenessToken` from both web and native clients:
 
-- `expo-passkey@^0.3.14`
-- `expo-passkey-liveness@0.1.0-alpha.1` (alpha — pin exactly)
+- `expo-passkey@^0.3.15`
+- `expo-passkey-liveness@0.1.0-alpha.2` (alpha — pin exactly)
 
 ### 2. Run the web app
 
