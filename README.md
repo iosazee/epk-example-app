@@ -8,11 +8,12 @@ Two apps, one backend.
 | Workspace | What it is | Demonstrates |
 |---|---|---|
 | [`apps/web`](./apps/web) | Next.js + Better Auth + Prisma | Server config wiring both plugins, browser WebAuthn ceremonies, debug surface, deploys to Vercel |
-| [`apps/mobile`](./apps/mobile) | Expo SDK 55 app (iOS + Android) | Native passkey ceremony, real face-liveness camera step, debug screen — built against the same backend |
+| [`apps/mobile`](./apps/mobile) | Expo SDK 55 app (iOS + Android) | Native passkey ceremony, liveness-wrapper wiring, debug screen — built against the same backend |
 
 The web app exercises everything **except** the native camera (it uses
-a demo `customProvider` that auto-passes). The mobile app fills that
-gap by running the real PAD ceremony on a physical device.
+a demo `customProvider` that auto-passes). The mobile app shows the native
+client wiring; configure a real provider adapter such as Rekognition or
+iProov on both server and native build when you want a real PAD ceremony.
 
 ## Layout
 
@@ -36,20 +37,26 @@ cd epk-example-app
 npm install --legacy-peer-deps
 ```
 
-The two libraries are installed from npm:
+The two libraries are installed from npm. Liveness-gated passkey flows
+need `expo-passkey` 0.3.14+ because that release forwards
+`livenessToken` from both web and native clients:
 
-- `expo-passkey@^0.3.12`
-- `expo-passkey-liveness@0.1.0-alpha.0` (alpha — pinned exactly)
+- `expo-passkey@^0.3.14`
+- `expo-passkey-liveness@0.1.0-alpha.1` (alpha — pin exactly)
 
 ### 2. Run the web app
 
 ```bash
 cp apps/web/.env.example apps/web/.env
-npm run db:push                    # creates SQLite at apps/web/prisma/dev.db
+docker run -d --name epk-pg -p 5432:5432 -e POSTGRES_PASSWORD=dev postgres:16
+# Edit apps/web/.env:
+#   DATABASE_URL="postgresql://postgres:dev@localhost:5432/postgres"
+npm run db:push                    # creates the Postgres schema
 npm run dev:web                    # http://localhost:3000
 ```
 
-Open <http://localhost:3000/test> for the browser flow.
+Open <http://localhost:3000>, sign in at `/login` with email OTP, then
+register a passkey from `/dashboard`.
 
 ### 3. Run the mobile app
 
@@ -92,13 +99,12 @@ time you build, run `npm run ios` or `npm run android` from
 - Demo `customProvider` auto-passes — no third-party credentials
   needed to see the full server flow
 
-### `apps/mobile` — native ceremony
+### `apps/mobile` — native ceremony wiring
 
-- Email/password sign-up + sign-in via `@better-auth/expo`, session
+- Email OTP sign-in via `@better-auth/expo`, session
   persisted in `expo-secure-store`
-- **Register passkey + liveness** — runs the real `expo-passkey-liveness`
-  native module (camera ceremony), then registers a platform passkey
-  bound to the device's secure enclave
+- **Register passkey + liveness** — calls `registerPasskeyWithLiveness`,
+  then registers a platform passkey bound to the device's secure enclave
 - **Sign in with passkey + liveness** — assertion ceremony with the
   same liveness gate
 - **Standalone liveness** — Mode 1 from the docs: runs `verifyLiveness`
@@ -106,6 +112,12 @@ time you build, run `npm run ios` or `npm run android` from
 - **Debug screen** — pulls `/api/debug/passkeys` and
   `/api/debug/liveness-sessions` from the backend so you can see the
   rows the ceremony just created
+
+The checked-in backend uses a demo liveness provider named `demo` so the web
+flow is deterministic and credential-free. To make the mobile liveness step
+open a real camera SDK, switch the server provider to `rekognitionProvider`
+or `iproovProvider`, add that provider to the `expo-passkey-liveness` config
+plugin options in `apps/mobile/app.config.ts`, then rebuild the dev client.
 
 ## Wiring the mobile app to the web backend
 

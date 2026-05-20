@@ -8,17 +8,24 @@ natively on iOS and Android against the `apps/web` backend.
 
 ## What it demonstrates
 
-- Email/password sign-up + sign-in via `@better-auth/expo`, session
+- Email OTP sign-in via `@better-auth/expo`, session
   persisted in `expo-secure-store`
 - **Register passkey + liveness** — `registerPasskeyWithLiveness`
-  runs the real camera ceremony then binds a platform passkey to the
-  device's secure enclave (Face ID / Touch ID / fingerprint)
+  obtains a liveness token then binds a platform passkey to the device's
+  secure enclave (Face ID / Touch ID / fingerprint)
 - **Sign in with passkey + liveness** — `authenticateWithPasskeyAndLiveness`
   drives the assertion + liveness gate
 - **Standalone liveness** — `verifyLiveness` on its own, returning a
   signed token (Mode 1 from the [docs](https://github.com/iosazee/expo-passkey-liveness#integration-modes))
 - **Debug screen** — fetches `/api/debug/passkeys` and
   `/api/debug/liveness-sessions` so you can see what landed server-side
+
+The default `apps/web` backend uses a demo `customProvider` called `demo`.
+That is enough to test server enforcement and audit rows, but a real native
+camera ceremony needs a provider adapter. Configure `rekognitionProvider` or
+`iproovProvider` server-side, add the same provider to the
+`expo-passkey-liveness` config plugin options in `app.config.ts`, and rebuild
+the dev client.
 
 ## Local dev
 
@@ -142,7 +149,7 @@ apps/mobile/
 ├── app/                              # expo-router routes
 │   ├── _layout.tsx
 │   ├── index.tsx                     # redirect to sign-in or tabs
-│   ├── (auth)/sign-in.tsx            # email/password
+│   ├── (auth)/sign-in.tsx            # email OTP + passkey sign-in
 │   └── (tabs)/
 │       ├── _layout.tsx
 │       ├── passkey.tsx               # register/auth/standalone liveness
