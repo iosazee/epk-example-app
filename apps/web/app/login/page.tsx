@@ -225,7 +225,7 @@ function PasskeyForm({ onSuccess }: { onSuccess: () => void }) {
         livenessToken: live.data.livenessToken,
       });
       if (r.error) {
-        setError(r.error.message ?? r.error.code ?? "Sign in failed");
+        setError(r.error.message || "Sign in failed");
         return;
       }
       onSuccess();
