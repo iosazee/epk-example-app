@@ -21,6 +21,50 @@ import {
 } from "@/lib/auth-client";
 import { verifyLivenessWeb } from "@/lib/liveness-web";
 
+/**
+ * expo-passkey wraps non-Error fetch failures via `String(err)`, which
+ * turns the BetterFetch error envelope into the literal "[object Object]".
+ * Walk a few common shapes to surface something useful regardless of how
+ * the error was thrown.
+ */
+function formatError(err: unknown, fallback: string): string {
+  if (!err) return fallback;
+  if (typeof err === "string") return err || fallback;
+
+  const candidates: unknown[] = [];
+  const seen = new WeakSet<object>();
+  function visit(node: unknown, depth: number) {
+    if (depth > 4 || node == null) return;
+    if (typeof node === "string") {
+      candidates.push(node);
+      return;
+    }
+    if (typeof node !== "object") return;
+    if (seen.has(node as object)) return;
+    seen.add(node as object);
+    const obj = node as Record<string, unknown>;
+    // Most common nested error fields, in priority order.
+    for (const key of ["message", "error", "body", "data", "code", "statusText"]) {
+      if (key in obj) visit(obj[key], depth + 1);
+    }
+  }
+  visit(err, 0);
+
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim() && c !== "[object Object]") {
+      return c;
+    }
+  }
+
+  try {
+    const json = JSON.stringify(err);
+    if (json && json !== "{}") return json;
+  } catch {
+    /* fall through */
+  }
+  return fallback;
+}
+
 interface PasskeyRow {
   id: string;
   credentialId: string;
@@ -98,7 +142,7 @@ export default function DashboardPage() {
     try {
       const live = await verifyLivenessWeb({ challenge: "registration" });
       if (live.error || !live.data) {
-        setError(live.error?.message ?? "Liveness check failed");
+        setError(formatError(live.error, "Liveness check failed"));
         return;
       }
       const r = await registerPasskey({
@@ -110,14 +154,12 @@ export default function DashboardPage() {
         livenessToken: live.data.livenessToken,
       });
       if (r.error) {
-        setError(
-          r.error.message ?? r.error.code ?? "Passkey registration failed"
-        );
+        setError(formatError(r.error, "Passkey registration failed"));
         return;
       }
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatError(e, "Passkey registration failed"));
     } finally {
       setBusy(false);
     }

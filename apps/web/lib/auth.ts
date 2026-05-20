@@ -102,7 +102,9 @@ export const auth = betterAuth({
       rpName: env.RP_NAME,
       rpId: env.RP_ID,
       origin: passkeyOrigins,
-      logger: { enabled: process.env.NODE_ENV !== "production" },
+      // Enabled in production for the demo so warnings surface in Vercel
+      // runtime logs. Flip to NODE_ENV-gated in a real deployment.
+      logger: { enabled: true, level: "debug" },
       schema: {
         authPasskey: { modelName: "passkey" },
         passkeyChallenge: { modelName: "passkeyChallenge" },
