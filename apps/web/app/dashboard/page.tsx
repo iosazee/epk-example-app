@@ -248,53 +248,68 @@ export default function DashboardPage() {
               .
             </h1>
             <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
-              Inspect bound credentials and the server-side audit trail from{" "}
+              {passkeys.length === 0
+                ? "You're signed in via email OTP. Bind a passkey to skip the email step next time — the ceremony writes an audit slice to "
+                : "Below is the audit trail emitted by "}
               <code className="data text-foreground">
                 /expo-passkey/liveness/verify
               </code>
-              . Register additional passkeys to bind more devices.
+              {passkeys.length === 0
+                ? "."
+                : ", with one row per ceremony. Add another passkey to bind a new device."}
             </p>
           </div>
 
-          {/* primary action card */}
-          <div className="relative overflow-hidden rounded-xl border border-border-strong bg-paper/40 p-6">
-            <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-phosphor/12 blur-3xl" />
-            <span className="tag">§ Action</span>
-            <h3 className="mt-5 text-[20px] leading-tight">
-              Bind a new passkey to this device.
-            </h3>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
-              Runs liveness · creates credential · writes audit slice.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleRegisterPasskey}
-                disabled={busy}
-                className="group inline-flex h-11 items-center justify-between gap-3 rounded-full bg-phosphor px-5 text-phosphor-foreground transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-60"
-              >
-                <span className="data text-[11px] uppercase tracking-[0.14em] font-bold">
-                  {busy ? "Registering ceremony…" : "Register passkey"}
-                </span>
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-phosphor-foreground/15">
-                  {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Fingerprint className="h-3.5 w-3.5" />
-                  )}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={refresh}
-                disabled={loading}
-                className="data inline-flex h-11 items-center gap-2 rounded-full border border-border-strong px-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground hover:border-foreground hover:text-foreground"
-              >
-                <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
-                Refresh
-              </button>
+          {/* primary action card — empty-state CTA flips to a bound-passkey
+              summary once the user has registered at least one credential. */}
+          {passkeys.length === 0 ? (
+            <div className="relative overflow-hidden rounded-xl border border-border-strong bg-paper/40 p-6">
+              <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-phosphor/12 blur-3xl" />
+              <span className="tag">§ Action</span>
+              <h3 className="mt-5 text-[20px] leading-tight">
+                Bind a new passkey to this device.
+              </h3>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
+                Runs liveness · creates credential · writes audit slice.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleRegisterPasskey}
+                  disabled={busy}
+                  className="group inline-flex h-11 items-center justify-between gap-3 rounded-full bg-phosphor px-5 text-phosphor-foreground transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-60"
+                >
+                  <span className="data text-[11px] uppercase tracking-[0.14em] font-bold">
+                    {busy ? "Registering ceremony…" : "Register passkey"}
+                  </span>
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-phosphor-foreground/15">
+                    {busy ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Fingerprint className="h-3.5 w-3.5" />
+                    )}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={refresh}
+                  disabled={loading}
+                  className="data inline-flex h-11 items-center gap-2 rounded-full border border-border-strong px-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground hover:border-foreground hover:text-foreground"
+                >
+                  <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+                  Refresh
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <BoundSummary
+              passkeys={passkeys}
+              busy={busy}
+              loading={loading}
+              onAddAnother={handleRegisterPasskey}
+              onRefresh={refresh}
+            />
+          )}
         </section>
 
         {error ? (
@@ -444,6 +459,112 @@ function Sigil() {
         EPK
       </span>
     </span>
+  );
+}
+
+function BoundSummary({
+  passkeys,
+  busy,
+  loading,
+  onAddAnother,
+  onRefresh,
+}: {
+  passkeys: PasskeyRow[];
+  busy: boolean;
+  loading: boolean;
+  onAddAnother: () => void;
+  onRefresh: () => void;
+}) {
+  const count = passkeys.length;
+  const preview = passkeys.slice(0, 3);
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-border-strong bg-paper/40 p-6">
+      <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-phosphor/12 blur-3xl" />
+      <div className="flex items-center justify-between">
+        <span className="tag tag-phosphor">
+          <span className="h-1.5 w-1.5 rounded-full bg-phosphor phosphor-flicker" />
+          bound
+        </span>
+        <span className="data text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {count} credential{count === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <h3 className="mt-5 text-[20px] leading-tight">
+        This device is{" "}
+        <span className="text-phosphor">passkey-ready</span>.
+      </h3>
+      <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
+        Sign out and sign back in via the{" "}
+        <span className="text-foreground">Passkey</span> tab — no email needed.
+      </p>
+
+      <ul className="mt-5 space-y-2">
+        {preview.map((p, i) => {
+          const liveness = p.metadata?.liveness;
+          return (
+            <li
+              key={p.id}
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-border-strong/60 bg-background/60 px-3 py-2"
+            >
+              <span className="data text-[10px] text-phosphor tracking-[0.1em]">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div className="min-w-0">
+                <p className="data truncate text-[12px]">
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-paper px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.12em] text-foreground">
+                    {p.platform}
+                  </span>{" "}
+                  <span className="text-muted-foreground">
+                    {p.credentialId.slice(0, 14)}…
+                  </span>
+                </p>
+                {liveness ? (
+                  <p className="data mt-0.5 text-[10.5px] text-muted-foreground">
+                    ▸ {liveness.provider} · score{" "}
+                    <span className="text-phosphor">{liveness.score}</span> ·{" "}
+                    {liveness.padLevel}
+                  </p>
+                ) : null}
+              </div>
+              <span className="data shrink-0 text-[10px] text-muted-foreground">
+                {new Date(p.createdAt).toLocaleDateString()}
+              </span>
+            </li>
+          );
+        })}
+        {count > preview.length ? (
+          <li className="data px-3 text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+            + {count - preview.length} more in the ledger below
+          </li>
+        ) : null}
+      </ul>
+
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onAddAnother}
+          disabled={busy}
+          className="data inline-flex h-10 items-center gap-2 rounded-full border border-phosphor/60 bg-phosphor/8 px-4 text-[11px] uppercase tracking-[0.14em] text-phosphor hover:bg-phosphor/15 disabled:opacity-60"
+        >
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Fingerprint className="h-3.5 w-3.5" />
+          )}
+          {busy ? "Registering…" : "Add another"}
+        </button>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="data inline-flex h-10 items-center gap-2 rounded-full border border-border-strong px-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground hover:border-foreground hover:text-foreground"
+        >
+          <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+          Refresh
+        </button>
+      </div>
+    </div>
   );
 }
 
