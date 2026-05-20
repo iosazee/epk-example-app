@@ -71,6 +71,21 @@ export const auth = betterAuth({
   database: prismaAdapter(db, { provider: "postgresql" }),
   // Passwordless only — passkeys (preferred) and email OTP (fallback).
   trustedOrigins: passkeyOrigins,
+  // Surface every API error in Vercel runtime logs while we debug the
+  // 400 from /expo-passkey/register. Remove or gate to dev before final
+  // shipping.
+  onAPIError: {
+    onError: (e) => {
+      const err = e as { status?: string; statusCode?: number; message?: string; data?: unknown; body?: unknown };
+      // eslint-disable-next-line no-console
+      console.error("[better-auth] API error", {
+        status: err?.status ?? err?.statusCode,
+        message: err?.message,
+        data: err?.data,
+        body: err?.body,
+      });
+    },
+  },
   plugins: [
     emailOTP({
       otpLength: 6,
